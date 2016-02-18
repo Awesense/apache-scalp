@@ -70,39 +70,6 @@ table = {}
 class BreakLoop( Exception ):
     pass
 
-txt_header = """
-#
-# File created by Scalp! by Romain Gaucher - http://code.google.com/p/apache-scalp
-# Apache log attack analysis tool based on PHP-IDS filters
-#
-"""
-
-xml_header = """<?xml version="1.0" encoding="utf-8"?>
-<!--
- File created by Scalp! by Romain Gaucher - http://code.google.com/p/apache-scalp
- Apache log attack analysis tool based on PHP-IDS filters
--->
-"""
-
-html_header = """<html><head><style>
-html, body {background-color:#ccc;color:#222;font-family:'Lucida Grande',Verdana,Arial,Sans-Serif;font-size:0.8em;line-height:1.6em;margin:0;padding:0;}
-body {background-color:#fff;padding:0; margin: 15px; border: 1px solid #444;}
-h1 {    display: block;    border-bottom: 2px solid #333;    padding: 5px;}
-h2 { display: block; font-size: 1.5em; font-weight: 700; background-color: #efefef;margin:10px;padding-left: 15px;}
-.match { display: block; margin: 10px; border: 1px solid; padding: 5px;}
-.impact { float: right; background-color: #fff; border: 1px solid #ccc; padding: 5px; font-size: 1.8em;}
-.impact-1,.impact-2,.impact-3 { background-color: #f2ffe0; border-color: #DEF0C3;}
-.impact-4,.impact-5 { background-color: #ffe6bf; border-color: #ffd38f;}
-.impact-6,.impact-7,.impact-8,.impact-9,.impact-10,.impact-11 /*...*/ { background-color: #FFEDEF; border-color: #FFC2CA;}
-.block {display:block; margin:5px;}
-.highlight {margin: 5px;}
-.reason {font-weight: 700; color: #444;}
-.line, .regexp {border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; background-color: #fff; padding: 2px; margin: 10px;}
-#footer {text-align: center;}
-</style></head><body>"""
-
-html_footer = "<div id='footer'>Scalp by Romain Gaucher &lt;r@rgaucher.info&gt; - <a href='http://rgaucher.info'>http://rgaucher.info</a></div></body></html>"
-
 class object_dict(dict):
     def __init__(self, initd=None):
         if initd is None:
@@ -152,16 +119,6 @@ def get_value(array, default):
     if 'value' in array:
         return array['value']
     return default
-
-def html_entities(str):
-    out = ""
-    for i in str:
-        if   i == '"': out += '&quot;'
-        elif i == '<': out += '&lt;'
-        elif i == '>': out += '&gt;'
-        else:
-            out += i
-    return out
 
 d_replace = {
     "\r":";",
@@ -268,7 +225,7 @@ def analyzer(data):
                         else:
                             return
 
-def scalper(access, filters, preferences = [], output = "text"):
+def scalper(access, filters, preferences = []):
     global table
     if not os.path.isfile(access):
         print "error: the log file doesn't exist"
@@ -276,9 +233,6 @@ def scalper(access, filters, preferences = [], output = "text"):
     if not os.path.isfile(filters):
         print "error: the filters file (XML) doesn't exist"
         print "please download it at https://svn.php-ids.org/svn/trunk/lib/IDS/default_filter.xml"
-        return
-    if output not in ('html', 'text', 'xml'):
-        print "error: the output format '%s' hasn't been recognized" % output
         return
     # load the XML file
     xml_filters = parse(filters)
@@ -288,7 +242,7 @@ def scalper(access, filters, preferences = [], output = "text"):
     # prepare to load the compiled regular expression
     regs = {} # type => (reg.compiled, impact, description, rule)
 
-    print "Loading XML file '%s'..." % filters
+    #print "Loading XML file '%s'..." % filters
     for group in xml_filters:
         for f in xml_filters[group]:
             if f == 'filter':
@@ -325,7 +279,7 @@ def scalper(access, filters, preferences = [], output = "text"):
         preferences['attack_type'] = regs.keys()
     flag = {} # {type => { impact => ({log_line dict}, rule, description, org_line) }}
 
-    print "Processing the file '%s'..." % access
+    #print "Processing the file '%s'..." % access
 
     sample, sampled_lines = False, []
     if preferences['sample'] != float(100):
@@ -388,123 +342,35 @@ def scalper(access, filters, preferences = [], output = "text"):
     for t in flag:
         for i in flag[t]:
             n += len(flag[t][i])
-    print "Scalp results:"
-    print "\tProcessed %d lines over %d" % (loc,lines)
-    print "\tFound %d attack patterns in %f s" % (n,tt)
+    #print "Scalp results:"
+    #print "\tProcessed %d lines over %d" % (loc,lines)
+    #print "\tFound %d attack patterns in %f s" % (n,tt)
 
     short_name = access[access.rfind(os.sep)+1:]
     if n > 0:
-        print "Generating output in %s%s%s_scalp_*" % (preferences['odir'],os.sep,short_name)
-        if 'html' in preferences['output']:
-            generate_html_file(flag, short_name, filters, preferences['odir'])
-        elif 'text' in preferences['output']:
-            generate_text_file(flag, short_name, filters, preferences['odir'])
-        elif 'xml' in preferences['output']:
-            generate_xml_file(flag, short_name, filters, preferences['odir'])
+        generate_text_file(flag, short_name, filters)
 
     # generate exceptions
     if len(diff) > 0:
-        o_except = open(os.path.abspath(preferences['odir'] + os.sep + "scalp_except.txt"), "w")
+        o_except = open(os.path.abspath("scalp_except.txt"), "w")
         for l in diff:
             o_except.write(l + '\n')
         o_except.close()
 
 
-def generate_text_file(flag, access, filters, odir):
-    curtime = time.strftime("%a-%d-%b-%Y", time.localtime())
-    fname = '%s_scalp_%s.txt' % (access,  curtime)
-    fname = os.path.abspath(odir + os.sep + fname)
-    try:
-        out = open(fname, 'w')
-        out.write(txt_header)
-        out.write("Scalped file: %s\n" % access)
-        out.write("Creation date: %s\n\n" % curtime)
-        for attack_type in flag:
-            if attack_type in names:
-                out.write("Attack %s (%s)\n" % (names[attack_type], attack_type))
-            else:
-                out.write("Attack type: %s\n" % attack_type)
-            impacts = flag[attack_type].keys()
-            impacts.sort(reverse=True)
+def generate_text_file(flag, access, filters):
+    for attack_type in flag:
+        impacts = flag[attack_type].keys()
+        impacts.sort(reverse=True)
 
-            for i in impacts:
-                out.write("\n\t### Impact %d\n" % int(i))
-                for e in flag[attack_type][i]:
-                    out.write("\t%s" % e[3])
-                    out.write("\tReason: \"%s\"\n\n" % e[2])
-        out.close()
-    except IOError:
-        print "Cannot open the file:", fname
-    return
+        for i in impacts:
+            for e in flag[attack_type][i]:
+                if attack_type in names:
+                    print "Attack %s (%s);\t" % (names[attack_type], attack_type),
+                else:
+                    print "Attack type: %s;\t" % attack_type,
+                print "Impact %d;\tReason: \"%s\";\t%s" % (int(i), e[2], e[3]),
 
-
-def generate_xml_file(flag, access, filters, odir):
-    curtime = time.strftime("%a-%d-%b-%Y", time.localtime())
-    fname = '%s_scalp_%s.xml' % (access,  curtime)
-    fname = os.path.abspath(odir + os.sep + fname)
-    try:
-        out = open(fname, 'w')
-        out.write(xml_header)
-        out.write("<scalp file=\"%s\" time=\"%s\">\n" % (access, curtime))
-        for attack_type in flag:
-            name = ""
-            if attack_type in names:
-                name = " name=\"%s\"" % names[attack_type]
-            out.write("  <attack type=\"%s\"%s>\n" % (attack_type, name))
-            impacts = flag[attack_type].keys()
-            impacts.sort(reverse=True)
-            for i in impacts:
-                out.write("    <impact value=\"%d\">\n" % int(i))
-                for e in flag[attack_type][i]:
-                    out.write("      <item>\n")
-                    out.write("        <reason><![CDATA[%s]]></reason>\n" % e[2])
-                    out.write("        <regexp><![CDATA[%s]]></regexp>\n" % e[1])
-                    out.write("        <line><![CDATA[%s]]></line>\n" % e[3])
-                    out.write("      </item>\n")
-                out.write("    </impact>\n")
-            out.write("  </attack>\n")
-        out.write("</scalp>")
-        out.close()
-    except IOError:
-        print "Cannot open the file:", fname
-    return
-    return
-
-def generate_html_file(flag, access, filters, odir):
-    curtime = time.strftime("%a-%d-%b-%Y", time.localtime())
-    fname = '%s_scalp_%s.html' % (access,  curtime)
-    fname = os.path.abspath(odir + os.sep + fname)
-    try:
-        out = open(fname, 'w')
-        out.write(html_header)
-        out.write("<h1>Scalp of %s [%s]</h1>\n" % (access, curtime))
-        for attack_type in flag:
-            name = ""
-            if attack_type in names:
-                name = "%s" % names[attack_type]
-            if len(flag[attack_type].values()) < 1:
-                continue
-            out.write("  <h2>%s (%s)</h2>\n" % (attack_type, name))
-            impacts = flag[attack_type].keys()
-            impacts.sort(reverse=True)
-            # order by impact
-            for i in impacts:
-                out.write("<div class='match impact-%d'>\n" % int(i))
-                out.write(" <div class='impact'>Impact %d</div>\n" % int(i))
-                # list the one of same impacts
-                for e in flag[attack_type][i]:
-                    out.write(" <div class='block highlight'>\n")
-                    out.write("  Reason: <span class='reason'>%s</span><br />\n" % html_entities(e[2]))
-                    out.write("  <span class='line'><b>Log line:</b>%s</span><br />\n" % html_entities(e[0][5]))
-                    out.write("  <span class='regexp'><b>Matching Regexp:</b>%s</span>\n" % html_entities(e[1]))
-                    out.write(" </div>\n")
-                out.write("</div>\n")
-            out.write("<br />\n")
-        out.write(html_footer)
-        out.close()
-    except IOError:
-        print "Cannot open the file:", fname
-    return
 
 months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -575,9 +441,6 @@ def help():
     print "                     the Apache logs using * as wild-card"
     print "                     ex: 04/Apr/2008:15:45;*/Mai/2008"
     print "                     if not specified at the end, the max or min are taken"
-    print "   --html      |-h:  generate an HTML output"
-    print "   --xml       |-x:  generate an XML output"
-    print "   --text      |-t:  generate a simple text output (default)"
     print "   --except    |-c:  generate a file that contains the non examined logs due to the"
     print "                     main regular expression; ill-formed Apache log etc."
     print "   --attack    |-a:  specify the list of attacks to look for"
@@ -590,15 +453,12 @@ def help():
     print "   --ignore-subnet|-n:  specify the list of Subnets to look exclude"
     print "                     the list of Subnets should be comma separated and not contain spaces"
     print "                     This option can be used in conjunction with --ignore-subnet"
-    print "   --output    |-o:  specifying the output directory; by default, scalp will try to write"
-    print "                     in the same directory as the log file"
     print "   --sample    |-s:  use a random sample of the lines, the number (float in [0,100]) is"
     print "                     the percentage, ex: --sample 0.1 for 1/1000"
 
 def main(argc, argv):
     filters = "default_filter.xml"
     access  = "access_log"
-    output  = ""
     preferences = {
         'attack_type' : [],
         'ip_exclude' : [],
@@ -610,8 +470,6 @@ def main(argc, argv):
         'except'     : False,
         'exhaustive' : False,
         'encodings'  : False,
-        'output'     : "",
-        'odir'       : os.path.abspath(os.curdir),
         'sample'     : float(100)
     }
 
@@ -626,8 +484,6 @@ def main(argc, argv):
                     filters = argv[i+1]
                 elif s in ("--log","-l"):
                     access = argv[i+1]
-                elif s in ("--output", "-o"):
-                    preferences['odir'] = argv[i+1]
                 elif s in ("--sample", "-s"):
                     try:
                         preferences['sample'] = float(argv[i+1])
@@ -638,12 +494,6 @@ def main(argc, argv):
                     preferences['period'] = analyze_date(argv[i+1])
                 elif s in ("--exhaustive", "-e"):
                     preferences['exhaustive'] = True
-                elif s in ("--html", "-h"):
-                    preferences['output'] += ",html"
-                elif s in ("--xml", "-x"):
-                    preferences['output'] += ",xml"
-                elif s in ("--text", "-t"):
-                    preferences['output'] += ",text"
                 elif s in ("--except", "-c"):
                     preferences['except'] = True
                 elif s in ("--tough","-u"):
@@ -657,17 +507,6 @@ def main(argc, argv):
                     preferences['subnet_exclude'] = argv[i+1].split(',')
             else:
                 print "argument error, '%s' has been ignored" % s
-        if len(preferences['output']) < 1:
-            preferences['output'] = "text"
-        if not os.path.isdir(preferences['odir']):
-            print "The directory %s doesn't exist, scalp will try to create it"
-            try:
-                os.mkdir(preferences['odir'])
-            except:
-                print "/!\ scalp cannot write in",preferences['odir']
-                print "/!\ Ising /tmp/scalp/ as new directory..."
-                preferences['odir'] = '/tmp/scalp'
-                os.mkdir(preferences['odir'])
         scalper(access, filters, preferences)
 
 if __name__ == "__main__":
