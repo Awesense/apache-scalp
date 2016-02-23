@@ -343,8 +343,8 @@ def scalper(access, filters, preferences = []):
         for i in flag[t]:
             n += len(flag[t][i])
     #print "Scalp results:"
-    #print "\tProcessed %d lines over %d" % (loc,lines)
-    #print "\tFound %d attack patterns in %f s" % (n,tt)
+    #print " Processed %d lines over %d" % (loc,lines)
+    #print " Found %d attack patterns in %f s" % (n,tt)
 
     short_name = access[access.rfind(os.sep)+1:]
     if n > 0:
@@ -366,10 +366,10 @@ def generate_text_file(flag, access, filters):
         for i in impacts:
             for e in flag[attack_type][i]:
                 if attack_type in names:
-                    print "Attack %s (%s);\t" % (names[attack_type], attack_type),
+                    print "Attack %s (%s); " % (names[attack_type], attack_type),
                 else:
-                    print "Attack type: %s;\t" % attack_type,
-                print "Impact %d;\tReason: \"%s\";\t%s" % (int(i), e[2], e[3]),
+                    print "Attack type: %s; " % attack_type,
+                print "Impact %d; Reason: \"%s\"; %s" % (int(i), e[2], e[3]),
 
 
 months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
