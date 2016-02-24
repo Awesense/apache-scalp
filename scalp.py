@@ -34,6 +34,8 @@
 from __future__ import with_statement
 import time, base64
 import os,sys,re,random
+from datetime import datetime
+import dateparser
 from StringIO import StringIO
 try:
     from lxml import etree
@@ -325,7 +327,7 @@ def scalper(access, filters, preferences = []):
                     except BreakLoop:
                         continue
 
-                if not correct_period(date, preferences['period']):
+                if not correct_period(parse_log_date(date), preferences['period']):
                     continue
                 loc += 1
                 if len(url) > 1 and method in ('GET','POST','HEAD','PUT','PUSH','OPTIONS'):
@@ -375,61 +377,17 @@ def generate_text_file(flag, access, filters):
 months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 def correct_period(date, period):
-    date   = date.replace(':', '/')
-    l_date = date.split('/')
-    for i in (2,1,0,3,4,5):
-        if i != 1:
-            cur = int(l_date[i])
-            if cur < period['start'][i] or cur > period['end'][i]:
-                return False
-        else:
-            cur = months.index(l_date[i])
-            if cur == -1:
-                return False
-            if cur < period['start'][i] or cur > period['end'][i]:
-                return False
-    return True
+    return (period['start'] <= date) and (date <= period['end'])
 
-
-def analyze_date(date):
-    """04/Apr/2008:15:45;*/May/2008"""
-
-    d_min = [01, 00, 0000, 00, 00, 00]
-    d_max = [31, 11, 9999, 24, 59, 59]
-
-    date   = date.replace(':', '/')
-    l_date = date.split(';')
-    l_start= l_date[0].split('/')
-    l_end  = l_date[1].split('/')
-
-    v_start = [01, 00, 0000, 00, 00, 00]
-    v_end   = [31, 11, 9999, 24, 59, 59]
-
-    for i in range(len(l_start)):
-        if l_start[i] == '*': continue
-        else:
-            if i == 1:
-                v_start[1] = months.index(l_start[1])
-            else:
-                cur = int(l_start[i])
-                if    cur < d_min[i]: v_start[i] = d_min[i]
-                elif  cur > d_max[i]: v_start[i] = d_max[i]
-                else:                 v_start[i] = cur
-    for i in range(len(l_end)):
-        if l_end[i] == '*': continue
-        else:
-            if i == 1:
-                v_end[1] = months.index(l_end[1])
-            else:
-                cur = int(l_end[i])
-                if    cur < d_min[i]: v_end[i] = d_min[i]
-                elif  cur > d_max[i]: v_end[i] = d_max[i]
-                else:                 v_end[i] = cur
-    return {'start' : v_start, 'end' : v_end}
+def parse_log_date(s):
+    "11/Dec/2015:21:29:40 -0800"
+    #dt = datetime.strptime(s, "%d/%b/%Y:%H:%M:%S %z") # timezone not working?
+    dt = datetime.strptime(s, "%d/%b/%Y:%H:%M:%S ")
+    return dt
 
 def help():
     print "Scalp the apache log! by Romain Gaucher - http://rgaucher.info"
-    print "usage:  ./scalp.py [--log|-l log_file] [--filters|-f filter_file] [--period time-frame] [OPTIONS] [--attack a1,a2,..,an]"
+    print "usage:  ./scalp.py [--log|-l log_file] [--filters|-f filter_file] [--since time-frame] [--until time-frame] [OPTIONS] [--attack a1,a2,..,an]"
     print "                   [--sample|-s 4.2]"
     print "   --log       |-l:  the apache log file './access_log' by default"
     print "   --filters   |-f:  the filter file     './default_filter.xml' by default"
@@ -437,9 +395,10 @@ def help():
     print "                     at the first found"
     print "   --tough     |-u:  try to decode the potential attack vectors (may increase"
     print "                     the examination time)"
-    print "   --period    |-p:  the period must be specified in the same format as in"
-    print "                     the Apache logs using * as wild-card"
-    print "                     ex: 04/Apr/2008:15:45;*/Mai/2008"
+    print "   --since     |-S:  a date string specifying the beginning of the time range of interest"
+    print "                     ex: '1 hour ago'"
+    print "   --until     |-U:  a date string specifying the end of the time range of interest"
+    print "                     ex: '5 minutes ago'"
     print "                     if not specified at the end, the max or min are taken"
     print "   --except    |-c:  generate a file that contains the non examined logs due to the"
     print "                     main regular expression; ill-formed Apache log etc."
@@ -464,8 +423,8 @@ def main(argc, argv):
         'ip_exclude' : [],
         'subnet_exclude' : [],
         'period' : {
-            'start' : [01, 00, 0000, 00, 00, 00],# day, month, year, hour, minute, second
-            'end'   : [31, 11, 9999, 24, 59, 59]
+            'start' : datetime.min,
+            'end'   : datetime.max
         },
         'except'     : False,
         'exhaustive' : False,
@@ -490,8 +449,10 @@ def main(argc, argv):
                     except:
                         preferences['sample'] = float(4.2)
                         print "/!\ Error in the sample size, will be 4.2%"
-                elif s in ("--period", "-p"):
-                    preferences['period'] = analyze_date(argv[i+1])
+                elif s in ("--since", "-S"):
+                    preferences['period']['start'] = dateparser.parse(argv[i+1])
+                elif s in ("--until", "-U"):
+                    preferences['period']['end'] = dateparser.parse(argv[i+1])
                 elif s in ("--exhaustive", "-e"):
                     preferences['exhaustive'] = True
                 elif s in ("--except", "-c"):
